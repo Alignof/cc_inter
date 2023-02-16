@@ -437,15 +437,15 @@ Member *register_struc_member(int *asize_ptr);
 Member *register_enum_member(void);
 
 // codegen.c
-void gen_main(void);
-void gen(Node *node);
-void gen_expr(Node *node);
-void gen_args(Node *args);
-void gen_calc(Node *node);
-void gen_lvar(Node *node);
-void gen_gvar(Node *node);
-void gen_struc(Node *node);
-void gen_address(Node *node);
-void expand_next(Node *node);
-void expand_block_code(Node *node);
+int exec(Node *node);
+int exec_expr(Node *node);
+int exec_args(Node *args);
+int exec_calc(Node *node);
+int exec_lvar(Node *node);
+int exec_gvar(Node *node);
+int exec_struc(Node *node);
+int exec_address(Node *node);
+void exec_main(void);
+int expand_next(Node *node);
+int expand_block_code(Node *node);
 
