@@ -1,8 +1,11 @@
+CFLAGS	:= -std=c11 -g -O0 -static -Wall 
+LDFLAGS := -static
+
 INCLUDE = -I./include -I/usr/include
 TARGET  := ./cc_inter
 SRCDIR  := ./src
 OBJDIR  := ./src/obj
-SOURCES := $(wildcard ./src/*.c)
+SOURCES := $(filter-out ./src/codegen_x8664.c, $(wildcard ./src/*.c))
 OBJECTS := $(addprefix $(OBJDIR)/, $(notdir $(SOURCES:.c=.o)))
 
 $(TARGET): $(OBJECTS)
