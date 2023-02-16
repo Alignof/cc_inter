@@ -80,12 +80,12 @@ void set_gvar(GVar *gvar){
 		if(gvar->init->kind == ND_BLOCK){
 			Node *init = gvar->init->rhs;
 			while(init){
-				gen_gvar_label(gvar, init);
+				//gen_gvar_label(gvar, init);
 				init = init->block_code;
 			}
 			if(gvar->init->offset) printf("        .zero   %d\n", gvar->init->offset);
 		}else{
-			gen_gvar_label(gvar, gvar->init);
+			//gen_gvar_label(gvar, gvar->init);
 		}
 	}else{
 		printf("	.zero	%d\n", gvar->memsize);
@@ -109,8 +109,7 @@ int main(int argc, char **argv){
 		fprintf(stderr, "function is not found.");
 	}
 
-	// generate code
-	gen_main();
+    exec_main();
 
 	return 0;
 }
