@@ -4,83 +4,89 @@
 #define Break	 (-2)
 #define Continue (-3)
 
-int control = Ok;
+#define SEGMENT_SIZE 3000
 
-int expand_next(Node *node){
-    int ret;
-	while(node){
-		ret = exec(node);
+int control				= Ok;
+char data_segment[SEGMENT_SIZE] = {0};
+
+int expand_next(Node *node) {
+	int ret;
+	while(node) {
+		ret	 = exec(node);
 		node = node->next;
 	}
 
-    return ret;
+	return ret;
 }
 
-int expand_block_code(Node *node){
-    int ret;
-	while(node){
+int expand_block_code(Node *node) {
+	int ret;
+	while(node) {
 		ret = exec(node);
-        if (control == Return) return ret;
-        if (control == Break) return Ok;
-        if (control == Continue) return Ok;
+		if(control == Return) return ret;
+		if(control == Break) return Ok;
+		if(control == Continue) return Ok;
 
 		node = node->block_code;
 	}
 
-    return ret;
+	return ret;
 }
 
-
-void exec_gvar_label(GVar *gvar, Node *init){
+void exec_gvar_label(GVar *gvar, Node *init) {
 	Type *type = get_pointer_type(gvar->type);
-	if(init->kind == ND_STR){
-		if(gvar->type->ty == PTR){
+	if(init->kind == ND_STR) {
+		if(gvar->type->ty == PTR) {
 			printf("	.quad	.LC%d\n", init->val);
-		}else if(gvar->type->ty == ARRAY){
+		} else if(gvar->type->ty == ARRAY) {
 			printf("	.string \"%.*s\"\n", init->len, init->str);
 			if(init->offset) printf("        .zero	%d\n", init->offset);
 		}
-	}else{
-		if(type->ty < INT){
+	} else {
+		if(type->ty < INT) {
 			printf("	.byte	%d\n", init->val);
-		}else{
+		} else {
 			printf("	.long	%d\n", init->val);
 		}
 	}
 }
 
-int exec_address(Node *node){
-	/**/ if(node->kind == ND_DEREF)   exec_expr(node->rhs);
-	else if(node->kind == ND_DOT)     exec_struc(node);
-	else if(node->kind == ND_ARROW)   exec_struc(node);
-	else if(node->kind == ND_GVAR)    exec_gvar(node);
-	else if(node->kind == ND_LVAR)    exec_lvar(node);
-	else error_at(token->str, "can not assign");
+void *exec_address(Node *node) {
+	if(node->kind == ND_DEREF)
+		return exec_expr(node->rhs);
+	else if(node->kind == ND_DOT)
+		return exec_struc(node);
+	else if(node->kind == ND_ARROW)
+		return exec_struc(node);
+	else if(node->kind == ND_GVAR)
+		return exec_gvar(node);
+	else if(node->kind == ND_LVAR)
+		return lookup_lvar(node);
+	else
+		error_at(token->str, "can not assign");
 }
 
-
-int exec_gvar(Node *node){
-	if(node->type->is_thread_local){
+int exec_gvar(Node *node) {
+	if(node->type->is_thread_local) {
 		printf("	mov rax, fs:0\n");
 		printf("	add rax, fs:%.*s@tpoff\n", node->len, node->str);
-	}else{
+	} else {
 		printf("	lea rax,%.*s[rip]\n", node->len, node->str);
 	}
 	printf("	push rax\n");
 }
 
-int exec_lvar(Node *node){
-	if(node->kind != ND_LVAR && node->kind != ND_CALL_FUNC){
-		error_at(token->str,"not a variable");
+void *lookup_lvar(Node *node) {
+    if(node->offset > SEGMENT_SIZE) error_at(token->str, "stack size exceed");
+	if(node->kind != ND_LVAR && node->kind != ND_CALL_FUNC) {
+		error_at(token->str, "not a variable");
 	}
 
-	printf("	mov rax,rbp\n");
-	printf("	sub rax,%d\n", node->offset);
-	printf("	push rax\n");
+	return (void *)(data_segment + node->offset);
 }
 
-int exec_struc(Node *node){
-	if(node->kind != ND_DOT && node->kind != ND_ARROW){
+int exec_struc(Node *node) {
+	if(node->kind != ND_DOT && node->kind != ND_ARROW) {
 		error_at(token->str, "not a struct");
 	}
 
@@ -93,24 +99,22 @@ int exec_struc(Node *node){
 	printf("	push rax\n");
 }
 
-int exec_args(Node *args){
+int exec_args(Node *args) {
 	int reg_num;
 	int arg_count = 0;
 
-	while(args){
+	while(args) {
 		exec_expr(args);
 		arg_count++;
-		args=args->block_code;
+		args = args->block_code;
 	}
 
-	for(reg_num = arg_count;reg_num > 0;reg_num--){
+	for(reg_num = arg_count; reg_num > 0; reg_num--) {
 		printf("	pop rax\n");
-		//printf("	mov %s,rax\n", reg[reg_num-1]);
+		// printf("	mov %s,rax\n", reg[reg_num-1]);
 	}
 	printf("	mov rax,%d\n", arg_count);
-
 }
-
 
 int exec_calc(Node *node) {
 	int left  = exec_expr(node->lhs);
@@ -151,6 +155,7 @@ int exec_calc(Node *node) {
 }
 
 int exec_expr(Node *node) {
+    void *lhs_ptr = NULL;
 	int reg_ty;
 	int reg_rty;
 
@@ -174,41 +179,37 @@ int exec_expr(Node *node) {
 		case ND_GVAR:
 			return exec_gvar(node);
 		case ND_LVAR:
-			return exec_lvar(node);
+			switch(node->type->ty) {
+				case CHAR:
+					return *(char *)lookup_lvar(node);
+				case INT:
+				case ENUM:
+					return *(int *)lookup_lvar(node);
+				case LONG:
+				case PTR:
+				case ARRAY:
+					return *(long *)lookup_lvar(node);
+			}
 		case ND_PREID:
 			// ++p -> p += 1
 			exec(node->lhs);
 			return Ok;
 		case ND_POSTID:
-			/*
-			// push
-			exec_address(node->lhs);			// push lhs
-			exec_expr(node->rhs->rhs->rhs);	// push rhs
-
-			// calc
-			printf("	pop rdi\n");		// rhs
-			printf("	pop rax\n");		// lhs
-			printf("	push [rax]\n");		// Evacuation lhs data
-			printf("	push rax\n");		// Evacuation lhs address
-			printf("	mov rax,[rax]\n");	// deref lhs
-
-			exec_calc(node->rhs->rhs);
-			printf("	push rax\n");  // rhs op lhs
-
-			// assign
-			printf("	pop rdi\n");  // src
-			printf("	pop rax\n");  // dst
-			if(node->lhs->type->ty == BOOL) {
-				printf("	mov R8B,dil\n");
-				printf("	cmp R8B,0\n");
-				printf("	setne dl\n");
-				printf("	movzb rdi,dl\n");
+			lhs_ptr = exec_address(node->lhs);
+			switch(node->rhs->type->ty) {
+				case CHAR:
+					*(char *)lhs_ptr = (char)exec_calc(node->rhs->rhs);
+					break;
+				case INT:
+				case ENUM:
+					*(int *)lhs_ptr = (int)exec_calc(node->rhs->rhs);
+					break;
+				case LONG:
+				case PTR:
+				case ARRAY:
+					*(long *)lhs_ptr = (long *)exec_calc(node->rhs->rhs);
+					break;
 			}
-			printf("	mov [rax],%s\n", reg_di[reg_lty]);
-
-			// already evacuated
-			// printf("	push rax\n");
-			*/
 			return Ok;
 		case ND_STR:
 			/*
@@ -217,41 +218,38 @@ int exec_expr(Node *node) {
 			*/
 			return Ok;
 		case ND_ASSIGN:
-			exec_address(node->lhs);
-			exec_expr(node->rhs);
+			lhs_ptr = exec_address(node->lhs);
+			switch(node->rhs->type->ty) {
+				case CHAR:
+					*(char *)lhs_ptr = (char)exec_expr(node->rhs);
+					break;
+				case INT:
+				case ENUM:
+					*(int *)lhs_ptr = (int)exec_expr(node->rhs);
+					break;
+				case LONG:
+				case PTR:
+				case ARRAY:
+					*(long *)lhs_ptr = (long *)exec_expr(node->rhs);
+					break;
+			}
 			return Ok;
 		case ND_COMPOUND:
-			// push
-			exec_address(node->lhs);	   // push lhs
-			exec_expr(node->rhs->rhs);  // push rhs
-
-			// calc
-			printf("	pop rdi\n");		// rhs
-			printf("	pop rax\n");		// lhs
-			printf("	push rax\n");		// Evacuation lhs
-			printf("	mov rax,[rax]\n");	// deref lhs
-
-			exec_calc(node->rhs);
-			printf("	push rax\n");  // rhs op lhs
-
-			// assign
-			printf("	pop rdi\n");  // src
-			printf("	pop rax\n");  // dst
-			if(node->lhs->type->ty <= CHAR) {
-				if(node->lhs->type->ty == BOOL) {
-					printf("	mov R8B,dil\n");
-					printf("	cmp R8B,0\n");
-					printf("	setne dl\n");
-					printf("	movzb rdi,dl\n");
-				}
-				printf("	mov [rax],dil\n");
-			} else if(node->lhs->type->ty == INT) {
-				printf("	mov [rax],edi\n");
-			} else {
-				printf("	mov [rax],rdi\n");
+			lhs_ptr = exec_address(node->lhs);
+			switch(node->rhs->type->ty) {
+				case CHAR:
+					*(char *)lhs_ptr = (char)exec_calc(node->rhs);
+					break;
+				case INT:
+				case ENUM:
+					*(int *)lhs_ptr = (int)exec_calc(node->rhs);
+					break;
+				case LONG:
+				case PTR:
+				case ARRAY:
+					*(long *)lhs_ptr = (long *)exec_calc(node->rhs);
+					break;
 			}
-
-			printf("	push rdi\n");
 			return Ok;
 		case ND_DOT:
 		case ND_ARROW:
@@ -293,16 +291,16 @@ int exec_expr(Node *node) {
 			return Ok;
 		default:
 			// check left hand side
-			//exec_expr(node->lhs);
+			// exec_expr(node->lhs);
 			// check right hand side
-			//exec_expr(node->rhs);
+			// exec_expr(node->rhs);
 			// calculation lhs and rhs
 			return exec_calc(node);
 	}
 }
 
 int exec(Node *node) {
-    int ret;
+	int ret;
 	Node *cases;
 
 	int reg_rty;
@@ -385,10 +383,10 @@ int exec(Node *node) {
 			} while(exec(node->lhs));
 			return Ok;
 		case ND_CONTINUE:
-            control = Continue;
+			control = Continue;
 			return Ok;
 		case ND_BREAK:
-            control = Break;
+			control = Break;
 			return Ok;
 		case ND_CASE:
 			/*
@@ -414,7 +412,7 @@ int exec(Node *node) {
 		case ND_BLOCK:
 			return expand_block_code(node->rhs);
 		case ND_RETURN:
-            control = Return;
+			control = Return;
 			return exec_expr(node->rhs);
 		default:
 			return exec_expr(node);
@@ -424,18 +422,18 @@ int exec(Node *node) {
 void exec_main(void) {
 	int i;
 	int j;
-    int ret;
+	int ret;
 
 	for(i = 0; func_list[i]; i++) {
 		if(strncmp(func_list[i]->name, "main", 4) == 0) {
 			for(j = 0; func_list[i]->code[j] != NULL; j++) {
-                control = Ok;
-				ret = exec(func_list[i]->code[j]);
-                if (control == Return) break;
+				control = Ok;
+				ret		= exec(func_list[i]->code[j]);
+				if(control == Return) break;
 			}
 
-            printf("%d\n", ret);
-            return;
+			printf("%d\n", ret);
+			return;
 		}
 	}
 }
