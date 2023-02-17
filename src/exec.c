@@ -48,13 +48,13 @@ int expand_block_code(Node *node) {
 
 void *exec_address(Node *node) {
 	if(node->kind == ND_DEREF)
-        not_implemented();
+		not_implemented();
 	else if(node->kind == ND_DOT)
-        not_implemented();
+		not_implemented();
 	else if(node->kind == ND_ARROW)
-        not_implemented();
+		not_implemented();
 	else if(node->kind == ND_GVAR)
-        not_implemented();
+		not_implemented();
 	else if(node->kind == ND_LVAR)
 		return lookup_lvar(node);
 	else
@@ -150,7 +150,7 @@ int exec_expr(Node *node) {
 			}
 			return Ok;
 		case ND_GVAR:
-            not_implemented();
+			not_implemented();
 		case ND_LVAR:
 			switch(node->type->ty) {
 				case CHAR:
